@@ -1,7 +1,7 @@
 import * as THREE from 'three';
 
 export class OhmsLaw {
-    constructor(sceneManager, controlPanel, dataDisplay) {
+    constructor(sceneManager, controlPanel, dataDisplay, challengeMode) {
         this.scene = sceneManager;
         this.controls = controlPanel;
         this.data = dataDisplay;

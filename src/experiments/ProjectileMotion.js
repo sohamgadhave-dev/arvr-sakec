@@ -1,10 +1,11 @@
 import * as THREE from 'three';
 
 export class ProjectileMotion {
-    constructor(sceneManager, controlPanel, dataDisplay) {
+    constructor(sceneManager, controlPanel, dataDisplay, challengeMode) {
         this.scene = sceneManager;
         this.controls = controlPanel;
         this.data = dataDisplay;
+        this.challengeMode = challengeMode || null;
         this.group = new THREE.Group();
         this.projectile = null;
         this.trail = [];
@@ -39,6 +40,10 @@ export class ProjectileMotion {
         this.totalEnergy = 0;
         this.mass = 1; // 1 kg
 
+        // Visual scale: maps real-world meters to 3D scene units
+        // Dynamically computed in _updateCalculations to fit within room
+        this._vs = 0.5; // initial default, gets recalculated
+
         this._build();
         this._setupControls();
         this._setupData();
@@ -52,9 +57,9 @@ export class ProjectileMotion {
         this.scene.addToScene(this.group);
         // Wider elevated camera to show full launcher + trajectory space
         this.scene.setCameraPosition(3, 6, 14);
-        this.scene.setCameraTarget(8, 1.5, 0);
+        this.scene.setCameraTarget(6, 1, 0);
         this._defaultCamPos = { x: 3, y: 6, z: 14 };
-        this._defaultCamTarget = { x: 8, y: 1.5, z: 0 };
+        this._defaultCamTarget = { x: 6, y: 1, z: 0 };
 
         this._animateBound = this._animate.bind(this);
         this.scene.onAnimate(this._animateBound);
@@ -72,8 +77,34 @@ export class ProjectileMotion {
     }
 
     _createGround() {
-        // Floor measurement ruler strip (tape measure on floor)
-        const rulerGeo = new THREE.PlaneGeometry(25, 0.08);
+        // Ground ruler group — rebuilt when _vs changes
+        this.rulerGroup = new THREE.Group();
+        this.group.add(this.rulerGroup);
+        this._buildRuler();
+    }
+
+    _buildRuler() {
+        // Clear previous ruler elements
+        while (this.rulerGroup.children.length > 0) {
+            const child = this.rulerGroup.children[0];
+            this.rulerGroup.remove(child);
+            if (child.geometry) child.geometry.dispose();
+            if (child.material) {
+                if (child.material.map) child.material.map.dispose();
+                child.material.dispose();
+            }
+        }
+
+        const vs = this._vs;
+        const maxVisual = 22; // Max visual units (wall at 25, leave margin)
+        // Compute how many real meters fit
+        const maxDist = Math.ceil(maxVisual / vs);
+        // Pick a nice tick step based on scale
+        const step = maxDist > 200 ? 50 : maxDist > 80 ? 20 : maxDist > 30 ? 10 : 5;
+
+        // Floor measurement ruler strip
+        const rulerVisLen = Math.min(maxDist * vs, maxVisual);
+        const rulerGeo = new THREE.PlaneGeometry(rulerVisLen, 0.08);
         const rulerMat = new THREE.MeshStandardMaterial({
             color: 0xf5c518,
             roughness: 0.6,
@@ -82,12 +113,14 @@ export class ProjectileMotion {
         });
         const ruler = new THREE.Mesh(rulerGeo, rulerMat);
         ruler.rotation.x = -Math.PI / 2;
-        ruler.position.set(12.5, 0.006, 0);
-        this.group.add(ruler);
+        ruler.position.set(rulerVisLen / 2, 0.006, 0);
+        this.rulerGroup.add(ruler);
 
         // Distance tick marks on floor
-        for (let i = 0; i <= 25; i += 1) {
-            const isMajor = i % 5 === 0;
+        for (let i = 0; i <= maxDist; i += (step >= 10 ? step / 5 : 1)) {
+            const isMajor = i % step === 0;
+            const vizX = i * vs;
+            if (vizX > maxVisual) break;
             const tickGeo = new THREE.PlaneGeometry(0.02, isMajor ? 0.3 : 0.15);
             const tickMat = new THREE.MeshBasicMaterial({
                 color: 0x1e293b,
@@ -95,23 +128,27 @@ export class ProjectileMotion {
             });
             const tick = new THREE.Mesh(tickGeo, tickMat);
             tick.rotation.x = -Math.PI / 2;
-            tick.position.set(i, 0.007, 0);
-            this.group.add(tick);
+            tick.position.set(vizX, 0.007, 0);
+            this.rulerGroup.add(tick);
 
             if (isMajor && i > 0) {
                 const label = this._makeLabel(`${i}m`, '#374151', 14);
-                label.position.set(i, 0.05, 0.4);
+                label.position.set(vizX, 0.05, 0.4);
                 label.scale.set(1.0, 0.5, 1);
-                this.group.add(label);
+                this.rulerGroup.add(label);
             }
         }
 
-        // Height markers (faint)
-        for (let h = 2; h <= 12; h += 2) {
+        // Height markers (faint) — only show heights that fit
+        const maxRealH = Math.ceil(7 / vs);
+        const hStep = maxRealH > 50 ? 20 : maxRealH > 20 ? 10 : 2;
+        for (let h = hStep; h <= maxRealH; h += hStep) {
+            const vizY = h * vs;
+            if (vizY > 7) break;
             const hLabel = this._makeLabel(`${h}m`, '#64748b', 12);
-            hLabel.position.set(-0.8, h, 0);
+            hLabel.position.set(-0.8, vizY, 0);
             hLabel.scale.set(0.8, 0.4, 1);
-            this.group.add(hLabel);
+            this.rulerGroup.add(hLabel);
         }
     }
 
@@ -380,7 +417,7 @@ export class ProjectileMotion {
         dot.position.y = 0.04;
         this.targetGroup.add(dot);
 
-        this.targetGroup.position.set(20, 0, 0);
+        this.targetGroup.position.set(10 * this._vs, 0, 0);
         this.group.add(this.targetGroup);
     }
 
@@ -738,14 +775,26 @@ export class ProjectileMotion {
         const flightTime = (2 * v * Math.sin(rad)) / g;
         const initialKE = 0.5 * this.mass * v * v;
 
+        // Dynamic visual scale — always fit trajectory within room
+        const maxVisualX = 22; // room wall at 25, leave margin
+        const maxVisualY = 7;  // ceiling at 8, leave margin
+        const scaleByX = range > 0.1 ? maxVisualX / range : 1;
+        const scaleByY = maxHeight > 0.1 ? maxVisualY / maxHeight : 1;
+        const newVs = Math.min(scaleByX, scaleByY, 1.0); // cap at 1:1
+
+        if (Math.abs(newVs - this._vs) > 0.01) {
+            this._vs = newVs;
+            this._buildRuler(); // rebuild ruler for new scale
+        }
+
         this.data.updateValue('range', range.toFixed(2), 'm');
         this.data.updateValue('max-height', maxHeight.toFixed(2), 'm');
         this.data.updateValue('flight-time', flightTime.toFixed(2), 's');
         this.data.updateValue('ke', initialKE.toFixed(1), 'J');
         this.data.updateValue('pe', '0.00', 'J');
 
-        // Update target position
-        this.targetGroup.position.x = Math.min(range, 55);
+        // Update target position (scaled)
+        this.targetGroup.position.x = Math.min(range * this._vs, maxVisualX);
     }
 
     _updatePreview() {
@@ -759,6 +808,7 @@ export class ProjectileMotion {
         const v = this.velocity;
         const g = this.gravity;
         const totalTime = (2 * v * Math.sin(rad)) / g;
+        const vs = this._vs;
 
         const points = [];
         const steps = 80;
@@ -768,7 +818,7 @@ export class ProjectileMotion {
             const x = v * Math.cos(rad) * t;
             const y = v * Math.sin(rad) * t - 0.5 * g * t * t;
             if (y < 0 && i > 0) break;
-            points.push(new THREE.Vector3(x, Math.max(y, 0), 0));
+            points.push(new THREE.Vector3(x * vs, Math.max(y, 0) * vs, 0));
         }
 
         if (points.length > 1) {
@@ -1078,13 +1128,15 @@ export class ProjectileMotion {
             this.hasReachedPeak = true;
             // Show height marker
             this.heightLine.visible = true;
-            const pts = [new THREE.Vector3(x, 0, 0), new THREE.Vector3(x, this.maxHeightReached + 0.36, 0)];
+            const vx_pos = x * this._vs;
+            const vMaxH = (this.maxHeightReached + 0.36) * this._vs;
+            const pts = [new THREE.Vector3(vx_pos, 0, 0), new THREE.Vector3(vx_pos, vMaxH, 0)];
             this.heightLine.geometry.dispose();
             this.heightLine.geometry = new THREE.BufferGeometry().setFromPoints(pts);
             this.heightLine.computeLineDistances();
 
             this.maxHeightLabel.visible = true;
-            this.maxHeightLabel.position.set(x + 0.8, (this.maxHeightReached + 0.36) / 2, 0);
+            this.maxHeightLabel.position.set(vx_pos + 0.6, vMaxH / 2, 0);
             this._updateLabelText(this.maxHeightLabel, `H=${this.maxHeightReached.toFixed(1)}m`, '#22c55e');
         }
 
@@ -1101,7 +1153,8 @@ export class ProjectileMotion {
 
         if (y <= 0.15 && t > 0.1) {
             // LANDED
-            this.projectile.position.set(x, 0.15, 0);
+            const vLandX = x * this._vs;
+            this.projectile.position.set(vLandX, 0.15, 0);
             this.isFlying = false;
             this.arrowGroup.visible = false;
             this.projectileLight.intensity = 0;
@@ -1110,7 +1163,7 @@ export class ProjectileMotion {
             this._returnCameraToDefault();
 
             // Impact effects
-            this._spawnImpactParticles(x, 0);
+            this._spawnImpactParticles(vLandX, 0);
             this._playImpactSound();
 
             // Landing marker with distance
@@ -1131,23 +1184,38 @@ export class ProjectileMotion {
             distLabel.scale.set(1.5, 0.75, 1);
             markerGroup.add(distLabel);
 
-            markerGroup.position.set(x, 0.03, 0);
+            markerGroup.position.set(vLandX, 0.03, 0);
             this.group.add(markerGroup);
             this.markers.push(markerGroup);
 
             this.data.updateValue('current-x', x.toFixed(2), 'm');
             this.data.updateValue('current-y', '0.00', 'm');
+
+            // ── Challenge integration: check result on landing ──
+            if (this.challengeMode && this.challengeMode.isActive()) {
+                const ch = this.challengeMode.currentChallenge;
+                if (ch.type === 'target') {
+                    this.challengeMode.checkResult(x, 'range');
+                } else if (ch.type === 'maxHeight') {
+                    this.challengeMode.checkResult(this.maxHeightReached, 'maxHeight');
+                } else if (ch.type === 'speedRun') {
+                    this.challengeMode.checkResult(1, 'speedRun');
+                }
+            }
+
             return;
         }
 
-        this.projectile.position.set(x, y, 0);
+        const vx_viz = x * this._vs;
+        const vy_viz = y * this._vs;
+        this.projectile.position.set(vx_viz, vy_viz, 0);
         this.data.updateValue('current-x', x.toFixed(2), 'm');
         this.data.updateValue('current-y', (y - 0.36).toFixed(2), 'm');
 
         // Smooth camera tracking — gently follow projectile during flight
         const cam = this.scene.controls;
-        const targetX = x * 0.3 + this._defaultCamTarget.x * 0.7;
-        const targetY = Math.min(Math.max(y * 0.2 + 1, this._defaultCamTarget.y), 4);
+        const targetX = vx_viz * 0.3 + this._defaultCamTarget.x * 0.7;
+        const targetY = Math.min(Math.max(vy_viz * 0.3 + 1, this._defaultCamTarget.y), 4);
         cam.target.x += (targetX - cam.target.x) * 0.03;
         cam.target.y += (targetY - cam.target.y) * 0.03;
 
@@ -1155,7 +1223,7 @@ export class ProjectileMotion {
         this.projectileGlow.material.opacity = 0.1 + speed * 0.003;
 
         // Update trail
-        this.trail.push(new THREE.Vector3(x, y, 0));
+        this.trail.push(new THREE.Vector3(vx_viz, vy_viz, 0));
         if (this.trailLine) {
             this.group.remove(this.trailLine);
             this.trailLine.geometry.dispose();

@@ -8,6 +8,7 @@ export class ChallengeMode {
         this.currentChallenge = null;
         this.startTime = 0;
         this.overlay = null;
+        this._onComplete = null; // callback when challenge ends
         this._createUI();
     }
 
@@ -112,7 +113,7 @@ export class ChallengeMode {
         const speedBonus = Math.max(0, ((timeLimit - timeTaken) / timeLimit) * 30);
         const score = Math.round(accuracy + speedBonus);
 
-        this.studentData.saveChallengeScore(this.currentChallenge.id, score);
+        this._lastResult = { challengeId: this.currentChallenge.id, score, time: timeTaken };
         this._showResult(true, score, timeTaken);
         return { success: true, score, time: timeTaken };
     }
@@ -132,21 +133,70 @@ export class ChallengeMode {
     _showResult(success, score, time, reason = '') {
         this.banner.style.display = 'none';
 
+        // Backdrop overlay to prevent interaction with experiment
+        const backdrop = document.createElement('div');
+        backdrop.className = 'challenge-result-backdrop';
+        document.body.appendChild(backdrop);
+
         const popup = document.createElement('div');
         popup.className = `challenge-result ${success ? 'success' : 'fail'}`;
         popup.innerHTML = `
       <div class="cr-icon">${success ? '🏆' : '❌'}</div>
       <div class="cr-title">${success ? 'Challenge Complete!' : 'Challenge Failed'}</div>
-      ${success ? `<div class="cr-score">Score: ${score}</div><div class="cr-time">Time: ${time.toFixed(1)}s</div>` : `<div class="cr-reason">${reason}</div>`}
-      <button class="btn btn-primary cr-close">OK</button>
+      ${success ? `
+        <div class="cr-score">Score: <strong>${score}</strong>/130</div>
+        <div class="cr-time">Time: ${time.toFixed(1)}s</div>
+        <div class="cr-buttons">
+          <button class="btn btn-primary cr-submit">✅ Submit Score</button>
+          <button class="btn btn-secondary cr-close">Close</button>
+        </div>
+      ` : `
+        <div class="cr-reason">${reason}</div>
+        <div class="cr-buttons">
+          <button class="btn btn-primary cr-retry">🔄 Try Again</button>
+          <button class="btn btn-secondary cr-close">Close</button>
+        </div>
+      `}
     `;
         document.body.appendChild(popup);
         requestAnimationFrame(() => popup.classList.add('show'));
 
-        popup.querySelector('.cr-close').addEventListener('click', () => {
+        const closePopup = () => {
             popup.classList.remove('show');
-            setTimeout(() => popup.remove(), 300);
+            setTimeout(() => {
+                popup.remove();
+                backdrop.remove();
+            }, 300);
+            if (this._onComplete) this._onComplete();
+        };
+
+        // Submit button — save score then close
+        popup.querySelector('.cr-submit')?.addEventListener('click', () => {
+            if (this._lastResult) {
+                this.studentData.saveChallengeScore(
+                    this._lastResult.challengeId, this._lastResult.score
+                );
+            }
+            // Show submitted confirmation
+            const btn = popup.querySelector('.cr-submit');
+            btn.textContent = '✅ Submitted!';
+            btn.disabled = true;
+            btn.style.opacity = '0.7';
+            setTimeout(closePopup, 800);
         });
+
+        // Retry button — close and restart the same challenge
+        popup.querySelector('.cr-retry')?.addEventListener('click', () => {
+            const ch = this.currentChallenge;
+            popup.classList.remove('show');
+            setTimeout(() => {
+                popup.remove();
+                backdrop.remove();
+                if (ch) this.start(ch);
+            }, 300);
+        });
+
+        popup.querySelector('.cr-close')?.addEventListener('click', closePopup);
     }
 
     isActive() { return this.active; }

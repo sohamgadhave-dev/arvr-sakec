@@ -28,7 +28,7 @@ export class LabEnvironment {
 
     // ─── FLOOR ─────────────────────────────────────────────
     _createFloor() {
-        const SIZE = 30;
+        const SIZE = 50;
         const geo = new THREE.PlaneGeometry(SIZE, SIZE);
         const mat = new THREE.MeshStandardMaterial({
             color: 0xb8bcc5,
@@ -66,7 +66,7 @@ export class LabEnvironment {
     // ─── WALLS ─────────────────────────────────────────────
     _createWalls() {
         const wallH = 8;
-        const halfW = 15;
+        const halfW = 25;
         const wallMat = new THREE.MeshStandardMaterial({
             color: 0xd5d8de,
             roughness: 0.85,
@@ -125,7 +125,7 @@ export class LabEnvironment {
 
     // ─── CEILING ───────────────────────────────────────────
     _createCeiling() {
-        const ceilGeo = new THREE.PlaneGeometry(30, 30);
+        const ceilGeo = new THREE.PlaneGeometry(50, 50);
         const ceilMat = new THREE.MeshStandardMaterial({
             color: 0xe8eaef,
             roughness: 0.9,
@@ -139,10 +139,10 @@ export class LabEnvironment {
 
         // Ceiling panel grid
         const panelMat = new THREE.LineBasicMaterial({ color: 0xc0c4cc, transparent: true, opacity: 0.3 });
-        for (let i = -14; i <= 14; i += 2.5) {
-            const h = [new THREE.Vector3(-15, 7.99, i), new THREE.Vector3(15, 7.99, i)];
+        for (let i = -24; i <= 24; i += 2.5) {
+            const h = [new THREE.Vector3(-25, 7.99, i), new THREE.Vector3(25, 7.99, i)];
             this.group.add(new THREE.Line(new THREE.BufferGeometry().setFromPoints(h), panelMat));
-            const v = [new THREE.Vector3(i, 7.99, -15), new THREE.Vector3(i, 7.99, 15)];
+            const v = [new THREE.Vector3(i, 7.99, -25), new THREE.Vector3(i, 7.99, 25)];
             this.group.add(new THREE.Line(new THREE.BufferGeometry().setFromPoints(v), panelMat));
         }
     }
@@ -269,7 +269,7 @@ export class LabEnvironment {
             cabinet.add(vent);
         }
 
-        cabinet.position.set(-12, 0, -10);
+        cabinet.position.set(-20, 0, -18);
         this.group.add(cabinet);
     }
 
@@ -392,7 +392,7 @@ export class LabEnvironment {
         plate.position.set(0.02, 0.8, 0.01);
         standGroup.add(plate);
 
-        standGroup.position.set(12, 0, -5);
+        standGroup.position.set(20, 0, -8);
         this.group.add(standGroup);
     }
 
@@ -425,12 +425,12 @@ export class LabEnvironment {
         base.position.y = 0.02;
         coneGroup.add(base);
 
-        coneGroup.position.set(10, 0, 3);
+        coneGroup.position.set(18, 0, 3);
         this.group.add(coneGroup);
 
         // Second cone
         const cone2 = coneGroup.clone();
-        cone2.position.set(10, 0, -3);
+        cone2.position.set(18, 0, -3);
         cone2.rotation.y = 0.5;
         this.group.add(cone2);
     }
@@ -489,7 +489,7 @@ export class LabEnvironment {
         textMesh.position.z = 0.032;
         boardGroup.add(textMesh);
 
-        boardGroup.position.set(0, 4.5, -14.96);
+        boardGroup.position.set(0, 4.5, -24.96);
         this.group.add(boardGroup);
     }
 
@@ -536,7 +536,7 @@ export class LabEnvironment {
         const posterTex = new THREE.CanvasTexture(posterCanvas);
         const posterMat = new THREE.MeshBasicMaterial({ map: posterTex });
         const poster = new THREE.Mesh(new THREE.PlaneGeometry(0.6, 0.9), posterMat);
-        poster.position.set(-14.96, 3.5, -4);
+        poster.position.set(-24.96, 3.5, -4);
         poster.rotation.y = Math.PI / 2;
         this.group.add(poster);
     }
@@ -575,7 +575,7 @@ export class LabEnvironment {
         const scaleTex = new THREE.CanvasTexture(scaleCanvas);
         const scaleMat = new THREE.MeshBasicMaterial({ map: scaleTex });
         const scaleMesh = new THREE.Mesh(new THREE.PlaneGeometry(0.15, 3), scaleMat);
-        scaleMesh.position.set(14.96, 2.5, -8);
+        scaleMesh.position.set(24.96, 2.5, -8);
         scaleMesh.rotation.y = -Math.PI / 2;
         this.group.add(scaleMesh);
     }
@@ -587,26 +587,26 @@ export class LabEnvironment {
             roughness: 0.5,
             metalness: 0.1
         });
-        const bbGeo = new THREE.BoxGeometry(30, 0.12, 0.03);
+        const bbGeo = new THREE.BoxGeometry(50, 0.12, 0.03);
 
         // Back
         const back = new THREE.Mesh(bbGeo, bbMat);
-        back.position.set(0, 0.06, -14.98);
+        back.position.set(0, 0.06, -24.98);
         this.group.add(back);
 
         // Front
         const front = new THREE.Mesh(bbGeo.clone(), bbMat);
-        front.position.set(0, 0.06, 14.98);
+        front.position.set(0, 0.06, 24.98);
         this.group.add(front);
 
         // Sides
-        const sideGeo = new THREE.BoxGeometry(0.03, 0.12, 30);
+        const sideGeo = new THREE.BoxGeometry(0.03, 0.12, 50);
         const leftBb = new THREE.Mesh(sideGeo, bbMat);
-        leftBb.position.set(-14.98, 0.06, 0);
+        leftBb.position.set(-24.98, 0.06, 0);
         this.group.add(leftBb);
 
         const rightBb = new THREE.Mesh(sideGeo.clone(), bbMat);
-        rightBb.position.set(14.98, 0.06, 0);
+        rightBb.position.set(24.98, 0.06, 0);
         this.group.add(rightBb);
     }
 
@@ -621,19 +621,19 @@ export class LabEnvironment {
         // Vertical posts
         const postGeo = new THREE.BoxGeometry(0.08, 2.4, 0.08);
         const leftPost = new THREE.Mesh(postGeo, frameMat);
-        leftPost.position.set(1, 1.2, 14.97);
+        leftPost.position.set(1, 1.2, 24.97);
         leftPost.castShadow = true;
         this.group.add(leftPost);
 
         const rightPost = new THREE.Mesh(postGeo.clone(), frameMat);
-        rightPost.position.set(-1, 1.2, 14.97);
+        rightPost.position.set(-1, 1.2, 24.97);
         rightPost.castShadow = true;
         this.group.add(rightPost);
 
         // Lintel
         const lintelGeo = new THREE.BoxGeometry(2.16, 0.08, 0.08);
         const lintel = new THREE.Mesh(lintelGeo, frameMat);
-        lintel.position.set(0, 2.4, 14.97);
+        lintel.position.set(0, 2.4, 24.97);
         this.group.add(lintel);
 
         // Door (dark)
@@ -645,7 +645,7 @@ export class LabEnvironment {
             side: THREE.DoubleSide
         });
         const door = new THREE.Mesh(doorGeo, doorMat);
-        door.position.set(0, 1.175, 14.95);
+        door.position.set(0, 1.175, 24.95);
         door.rotation.y = Math.PI;
         this.group.add(door);
 
@@ -654,7 +654,7 @@ export class LabEnvironment {
         const handleMat = new THREE.MeshStandardMaterial({ color: 0xccc, metalness: 0.8, roughness: 0.2 });
         const handle = new THREE.Mesh(handleGeo, handleMat);
         handle.rotation.z = Math.PI / 2;
-        handle.position.set(-0.6, 1.1, 14.93);
+        handle.position.set(-0.6, 1.1, 24.93);
         this.group.add(handle);
     }
 
@@ -664,9 +664,9 @@ export class LabEnvironment {
         const positions = new Float32Array(count * 3);
 
         for (let i = 0; i < count; i++) {
-            positions[i * 3] = (Math.random() - 0.5) * 25;
+            positions[i * 3] = (Math.random() - 0.5) * 45;
             positions[i * 3 + 1] = 1 + Math.random() * 6;
-            positions[i * 3 + 2] = (Math.random() - 0.5) * 25;
+            positions[i * 3 + 2] = (Math.random() - 0.5) * 45;
         }
 
         const geo = new THREE.BufferGeometry();

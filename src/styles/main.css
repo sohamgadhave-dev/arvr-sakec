@@ -2085,6 +2085,25 @@ input[type="range"]::-moz-range-thumb {
   margin-bottom: var(--space-lg);
 }
 
+.cr-buttons {
+  display: flex;
+  gap: var(--space-sm);
+  justify-content: center;
+  margin-top: var(--space-lg);
+}
+
+.cr-buttons .btn {
+  min-width: 120px;
+}
+
+.challenge-result-backdrop {
+  position: fixed;
+  inset: 0;
+  z-index: 2999;
+  background: rgba(0, 0, 0, 0.5);
+  backdrop-filter: blur(4px);
+}
+
 .cr-close {
   margin-top: var(--space-md);
 }
@@ -2770,6 +2789,7 @@ input[type="range"]:active::-webkit-slider-thumb {
     opacity: 0;
     transform: translateY(4px);
   }
+
   to {
     opacity: 1;
     transform: translateY(0);
@@ -2795,8 +2815,15 @@ input[type="range"]:active::-webkit-slider-thumb {
 }
 
 @keyframes slowmoPulse {
-  0%, 100% { box-shadow: 0 0 10px rgba(245, 158, 11, 0.3); }
-  50% { box-shadow: 0 0 20px rgba(245, 158, 11, 0.6); }
+
+  0%,
+  100% {
+    box-shadow: 0 0 10px rgba(245, 158, 11, 0.3);
+  }
+
+  50% {
+    box-shadow: 0 0 20px rgba(245, 158, 11, 0.6);
+  }
 }
 
 /* Circuit Switch */

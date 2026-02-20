@@ -183,17 +183,17 @@ class App {
         switch (id) {
             case 'projectile':
                 this.currentExperiment = new ProjectileMotion(
-                    this.sceneManager, this.controlPanel, this.dataDisplay
+                    this.sceneManager, this.controlPanel, this.dataDisplay, this.challengeMode
                 );
                 break;
             case 'ohms-law':
                 this.currentExperiment = new OhmsLaw(
-                    this.sceneManager, this.controlPanel, this.dataDisplay
+                    this.sceneManager, this.controlPanel, this.dataDisplay, this.challengeMode
                 );
                 break;
             case 'pendulum':
                 this.currentExperiment = new SimplePendulum(
-                    this.sceneManager, this.controlPanel, this.dataDisplay
+                    this.sceneManager, this.controlPanel, this.dataDisplay, this.challengeMode
                 );
                 break;
         }
