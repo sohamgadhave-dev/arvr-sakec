@@ -32,6 +32,9 @@ export class SimplePendulum {
         // Phase portrait data
         this.phaseData = [];
 
+        // Ghost pendulum for comparison
+        this.ghostPendulums = [];
+
         this._build();
         this._setupControls();
         this._setupData();
@@ -39,6 +42,8 @@ export class SimplePendulum {
         this._updateCalculations();
         this.currentAngle = THREE.MathUtils.degToRad(this.amplitude);
         this.pendulumGroup.rotation.z = this.currentAngle;
+
+        this._setupDragBob();
 
         this.scene.addToScene(this.group);
         this.scene.setCameraPosition(0, 4, 8);
@@ -529,7 +534,7 @@ export class SimplePendulum {
     _setupControls() {
         this.controls.setSliders([
             { id: 'length', label: '📏 String Length', min: 0.3, max: 4, step: 0.1, value: this.length, unit: 'm' },
-            { id: 'gravity', label: '🌍 Gravity', min: 1, max: 20, step: 0.1, value: this.gravity, unit: 'm/s²' },
+            { id: 'gravity', label: '🌍 Gravity', min: 1, max: 25, step: 0.1, value: this.gravity, unit: 'm/s²' },
             { id: 'amplitude', label: '📐 Amplitude', min: 5, max: 80, step: 1, value: this.amplitude, unit: '°' },
             { id: 'damping', label: '💧 Damping', min: 0, max: 0.5, step: 0.01, value: this.damping, unit: '' },
             { id: 'mass', label: '⚖️ Bob Mass', min: 0.1, max: 5, step: 0.1, value: this.mass, unit: 'kg' }
@@ -550,6 +555,14 @@ export class SimplePendulum {
             this.bob.scale.set(scale, scale, scale);
         });
 
+        // Gravity planet presets
+        this.controls.setPresets('🪐 Gravity Presets', [
+            { id: 'p-earth', text: '🌍 Earth 9.8', value: 9.8, onClick: (v) => { this.controls.updateSlider('gravity', v); } },
+            { id: 'p-moon', text: '🌙 Moon 1.6', value: 1.6, onClick: (v) => { this.controls.updateSlider('gravity', v); } },
+            { id: 'p-mars', text: '🔴 Mars 3.7', value: 3.7, onClick: (v) => { this.controls.updateSlider('gravity', v); } },
+            { id: 'p-jupiter', text: '🪐 Jupiter 24.8', value: 24.8, onClick: (v) => { this.controls.updateSlider('gravity', v); } }
+        ], 'pendulum-gravity');
+
         this.controls.setActions([
             {
                 id: 'start',
@@ -559,6 +572,13 @@ export class SimplePendulum {
                 onClick: () => this._toggleSwing()
             },
             {
+                id: 'ghost',
+                label: 'Add Comparison 👻',
+                icon: '',
+                className: 'btn-secondary',
+                onClick: () => this._addGhostPendulum()
+            },
+            {
                 id: 'reset',
                 label: 'Reset 🔄',
                 icon: '',
@@ -566,6 +586,134 @@ export class SimplePendulum {
                 onClick: () => this._reset()
             }
         ]);
+    }
+
+    // ─── DRAG TO RELEASE BOB ──────────────────────────
+    _setupDragBob() {
+        this._raycaster = new THREE.Raycaster();
+        this._mouse = new THREE.Vector2();
+        this._isDraggingBob = false;
+        const canvas = this.scene.canvas;
+
+        this._onPointerDown = (e) => {
+            this._mouse.x = (e.clientX / window.innerWidth) * 2 - 1;
+            this._mouse.y = -(e.clientY / window.innerHeight) * 2 + 1;
+            this._raycaster.setFromCamera(this._mouse, this.scene.camera);
+            const hits = this._raycaster.intersectObject(this.bob, true);
+            if (hits.length > 0 && !this.isSwinging) {
+                this._isDraggingBob = true;
+                canvas.classList.add('dragging');
+                this.scene.controls.enabled = false;
+            }
+        };
+
+        this._onPointerMove = (e) => {
+            if (this._isDraggingBob) {
+                // Calculate angle from mouse position relative to pivot
+                this._mouse.x = (e.clientX / window.innerWidth) * 2 - 1;
+                this._mouse.y = -(e.clientY / window.innerHeight) * 2 + 1;
+
+                // Get pivot world position (top of pendulum)
+                const pivotWorld = new THREE.Vector3(0, 5.2, 0);
+                this.group.localToWorld(pivotWorld);
+
+                // Project pivot to screen
+                const pivotScreen = pivotWorld.clone().project(this.scene.camera);
+
+                // Calculate angle from vertical based on mouse offset
+                const dx = this._mouse.x - pivotScreen.x;
+                const dy = this._mouse.y - pivotScreen.y;
+                const angle = Math.atan2(dx, -dy);
+                const clampedAngle = Math.max(-Math.PI / 2, Math.min(Math.PI / 2, angle));
+
+                this.currentAngle = clampedAngle;
+                this.pendulumGroup.rotation.z = this.currentAngle;
+
+                // Update amplitude slider and readout
+                const angleDeg = Math.abs(THREE.MathUtils.radToDeg(clampedAngle));
+                this.amplitude = Math.round(angleDeg);
+                this.controls.updateSlider('amplitude', this.amplitude);
+
+                return;
+            }
+
+            // Hover detection
+            this._mouse.x = (e.clientX / window.innerWidth) * 2 - 1;
+            this._mouse.y = -(e.clientY / window.innerHeight) * 2 + 1;
+            this._raycaster.setFromCamera(this._mouse, this.scene.camera);
+            const hits = this._raycaster.intersectObject(this.bob, true);
+            canvas.classList.toggle('hovering-interactive', hits.length > 0 && !this.isSwinging);
+        };
+
+        this._onPointerUp = () => {
+            if (this._isDraggingBob) {
+                this._isDraggingBob = false;
+                canvas.classList.remove('dragging');
+                this.scene.controls.enabled = true;
+
+                // Release: start swinging from the dragged angle
+                this.angularVelocity = 0;
+                this.isSwinging = true;
+                this.elapsed = 0;
+                this.periodTimer = 0;
+                this.crossCount = 0;
+                this.oscillationCount = 0;
+                this.maxSpeed = 0;
+                this.tracePoints = [];
+                this.phaseData = [];
+                const btn = document.getElementById('action-start');
+                if (btn) btn.innerHTML = 'Pause ⏸️';
+            }
+        };
+
+        canvas.addEventListener('pointerdown', this._onPointerDown);
+        canvas.addEventListener('pointermove', this._onPointerMove);
+        canvas.addEventListener('pointerup', this._onPointerUp);
+    }
+
+    // ─── GHOST COMPARISON PENDULUM ────────────────────
+    _addGhostPendulum() {
+        if (this.ghostPendulums.length >= 2) return; // max 2 ghosts
+
+        // Ghost with different length for comparison
+        const ghostLength = this.length * (0.5 + Math.random() * 1.0);
+        const ghostGroup = new THREE.Group();
+        ghostGroup.position.set(0, 5.2, 0.5 + this.ghostPendulums.length * 0.5);
+
+        // Ghost string
+        const stringGeo = new THREE.CylinderGeometry(0.008, 0.008, ghostLength, 6);
+        const stringMat = new THREE.MeshBasicMaterial({ color: 0x8b5cf6, transparent: true, opacity: 0.3 });
+        const string = new THREE.Mesh(stringGeo, stringMat);
+        string.position.y = -ghostLength / 2;
+        ghostGroup.add(string);
+
+        // Ghost bob
+        const bobGeo = new THREE.SphereGeometry(0.18, 16, 16);
+        const bobMat = new THREE.MeshBasicMaterial({ color: 0x8b5cf6, transparent: true, opacity: 0.25 });
+        const bob = new THREE.Mesh(bobGeo, bobMat);
+        bob.position.y = -ghostLength;
+        ghostGroup.add(bob);
+
+        // Ghost length label
+        const label = this._makeLabel(`L=${ghostLength.toFixed(1)}m`, '#8b5cf6', 12);
+        label.position.set(0.5, -ghostLength / 2, 0);
+        label.scale.set(1, 0.5, 1);
+        ghostGroup.add(label);
+
+        // Set initial angle
+        ghostGroup.rotation.z = THREE.MathUtils.degToRad(this.amplitude);
+
+        // Physics state
+        const ghost = {
+            group: ghostGroup,
+            length: ghostLength,
+            angle: THREE.MathUtils.degToRad(this.amplitude),
+            angularVelocity: 0,
+            label: label
+        };
+
+        this.group.add(ghostGroup);
+        this.ghostPendulums.push(ghost);
     }
 
     _setupData() {
@@ -651,6 +799,16 @@ export class SimplePendulum {
         this.traceGeometry.dispose();
         this.traceGeometry = new THREE.BufferGeometry();
         this.traceLine.geometry = this.traceGeometry;
+
+        // Remove ghost pendulums
+        this.ghostPendulums.forEach(g => {
+            this.group.remove(g.group);
+            g.group.traverse(child => {
+                if (child.geometry) child.geometry.dispose();
+                if (child.material) child.material.dispose();
+            });
+        });
+        this.ghostPendulums = [];
 
         this._drawPhaseGraph();
 
@@ -764,6 +922,15 @@ export class SimplePendulum {
         if (this.phaseData.length % 3 === 0) {
             this._drawPhaseGraph();
         }
+
+        // Animate ghost pendulums
+        this.ghostPendulums.forEach(ghost => {
+            if (!this.isSwinging) return;
+            const gAccel = -(this.gravity / ghost.length) * Math.sin(ghost.angle) - this.damping * ghost.angularVelocity;
+            ghost.angularVelocity += gAccel * dt;
+            ghost.angle += ghost.angularVelocity * dt;
+            ghost.group.rotation.z = ghost.angle;
+        });
     }
 
     _makeLabel(text, color, fontSize = 20) {
@@ -803,6 +970,22 @@ export class SimplePendulum {
         if (this.phaseGraphDiv && this.phaseGraphDiv.parentElement) {
             this.phaseGraphDiv.remove();
         }
+
+        // Remove drag listeners
+        const canvas = this.scene.canvas;
+        if (this._onPointerDown) canvas.removeEventListener('pointerdown', this._onPointerDown);
+        if (this._onPointerMove) canvas.removeEventListener('pointermove', this._onPointerMove);
+        if (this._onPointerUp) canvas.removeEventListener('pointerup', this._onPointerUp);
+        canvas.classList.remove('dragging', 'hovering-interactive');
+
+        // Remove ghost pendulums
+        this.ghostPendulums.forEach(g => {
+            this.group.remove(g.group);
+            g.group.traverse(child => {
+                if (child.geometry) child.geometry.dispose();
+                if (child.material) child.material.dispose();
+            });
+        });
 
         this.group.traverse(child => {
             if (child.geometry) child.geometry.dispose();

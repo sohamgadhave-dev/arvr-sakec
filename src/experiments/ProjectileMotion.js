@@ -29,6 +29,9 @@ export class ProjectileMotion {
         this.airResistance = false;
         this.dragCoeff = 0.01;
         this.showEnergy = true;
+        this.slowMotion = false;
+        this.windEnabled = false;
+        this.windSpeed = 5;
 
         // Energy tracking
         this.kineticEnergy = 0;
@@ -40,13 +43,18 @@ export class ProjectileMotion {
         this._setupControls();
         this._setupData();
         this._updatePreview();
+        this._setupDragAim();
+        this._createWindArrow();
 
         // Audio
         this._initAudio();
 
         this.scene.addToScene(this.group);
-        this.scene.setCameraPosition(4, 1.7, 6);
-        this.scene.setCameraTarget(5, 1.0, 0);
+        // Wider elevated camera to show full launcher + trajectory space
+        this.scene.setCameraPosition(3, 6, 14);
+        this.scene.setCameraTarget(8, 1.5, 0);
+        this._defaultCamPos = { x: 3, y: 6, z: 14 };
+        this._defaultCamTarget = { x: 8, y: 1.5, z: 0 };
 
         this._animateBound = this._animate.bind(this);
         this.scene.onAnimate(this._animateBound);
@@ -540,7 +548,7 @@ export class ProjectileMotion {
         this.controls.setSliders([
             { id: 'angle', label: '🎯 Launch Angle', min: 5, max: 85, step: 1, value: this.angle, unit: '°' },
             { id: 'velocity', label: '💨 Initial Velocity', min: 1, max: 50, step: 0.5, value: this.velocity, unit: 'm/s' },
-            { id: 'gravity', label: '🌍 Gravity', min: 1, max: 20, step: 0.1, value: this.gravity, unit: 'm/s²' },
+            { id: 'gravity', label: '🌍 Gravity', min: 1, max: 25, step: 0.1, value: this.gravity, unit: 'm/s²' },
             { id: 'mass', label: '⚖️ Mass', min: 0.1, max: 10, step: 0.1, value: this.mass, unit: 'kg' }
         ], (id, val, all) => {
             this.angle = all.angle;
@@ -551,6 +559,25 @@ export class ProjectileMotion {
             this._updatePreview();
             this._updateCalculations();
         });
+
+        // Gravity planet presets
+        this.controls.setPresets('🪐 Gravity Presets', [
+            { id: 'earth', text: '🌍 Earth 9.8', value: 9.8, onClick: (v) => { this.controls.updateSlider('gravity', v); } },
+            { id: 'moon', text: '🌙 Moon 1.6', value: 1.6, onClick: (v) => { this.controls.updateSlider('gravity', v); } },
+            { id: 'mars', text: '🔴 Mars 3.7', value: 3.7, onClick: (v) => { this.controls.updateSlider('gravity', v); } },
+            { id: 'jupiter', text: '🪐 Jupiter 24.8', value: 24.8, onClick: (v) => { this.controls.updateSlider('gravity', v); } }
+        ], 'gravity-presets');
+
+        // Toggles for slow-mo and wind
+        this.controls.setToggles([
+            { id: 'slowmo', label: '🐢 Slow Motion', value: false, onChange: (on) => { this.slowMotion = on; } },
+            {
+                id: 'wind', label: '🌬️ Wind Resistance', value: false, onChange: (on) => {
+                    this.windEnabled = on;
+                    if (this.windArrowGroup) this.windArrowGroup.visible = on;
+                }
+            }
+        ]);
 
         this.controls.setActions([
             {
@@ -575,6 +602,105 @@ export class ProjectileMotion {
                 onClick: () => this._reset()
             }
         ]);
+    }
+
+    // ─── DRAG-TO-AIM ────────────────────────────────────
+    _setupDragAim() {
+        this._raycaster = new THREE.Raycaster();
+        this._mouse = new THREE.Vector2();
+        this._isDraggingBarrel = false;
+        const canvas = this.scene.canvas;
+
+        this._onPointerDown = (e) => {
+            this._mouse.x = (e.clientX / window.innerWidth) * 2 - 1;
+            this._mouse.y = -(e.clientY / window.innerHeight) * 2 + 1;
+            this._raycaster.setFromCamera(this._mouse, this.scene.camera);
+            const hits = this._raycaster.intersectObject(this.barrel, true);
+            if (hits.length > 0) {
+                this._isDraggingBarrel = true;
+                this._dragStartY = e.clientY;
+                this._dragStartAngle = this.angle;
+                canvas.classList.add('dragging');
+                this.scene.controls.enabled = false;
+            }
+        };
+
+        this._onPointerMove = (e) => {
+            if (this._isDraggingBarrel) {
+                const dy = this._dragStartY - e.clientY;
+                const newAngle = Math.max(5, Math.min(85, this._dragStartAngle + dy * 0.3));
+                this.angle = Math.round(newAngle);
+                this._updateBarrelAngle();
+                this._updatePreview();
+                this._updateCalculations();
+                this.controls.updateSlider('angle', this.angle);
+            } else {
+                // Hover detect for grab cursor
+                this._mouse.x = (e.clientX / window.innerWidth) * 2 - 1;
+                this._mouse.y = -(e.clientY / window.innerHeight) * 2 + 1;
+                this._raycaster.setFromCamera(this._mouse, this.scene.camera);
+                const hits = this._raycaster.intersectObject(this.barrel, true);
+                if (hits.length > 0) {
+                    canvas.classList.add('hovering-interactive');
+                } else {
+                    canvas.classList.remove('hovering-interactive');
+                }
+            }
+        };
+
+        this._onPointerUp = () => {
+            if (this._isDraggingBarrel) {
+                this._isDraggingBarrel = false;
+                canvas.classList.remove('dragging');
+                this.scene.controls.enabled = true;
+            }
+        };
+
+        canvas.addEventListener('pointerdown', this._onPointerDown);
+        canvas.addEventListener('pointermove', this._onPointerMove);
+        canvas.addEventListener('pointerup', this._onPointerUp);
+    }
+
+    // ─── WIND ARROW INDICATOR ───────────────────────────
+    _createWindArrow() {
+        this.windArrowGroup = new THREE.Group();
+        this.windArrowGroup.visible = false;
+
+        // Arrow shaft
+        const shaftGeo = new THREE.CylinderGeometry(0.03, 0.03, 2, 8);
+        const shaftMat = new THREE.MeshBasicMaterial({ color: 0x60a5fa, transparent: true, opacity: 0.6 });
+        const shaft = new THREE.Mesh(shaftGeo, shaftMat);
+        shaft.rotation.z = Math.PI / 2;
+        this.windArrowGroup.add(shaft);
+
+        // Arrow head
+        const headGeo = new THREE.ConeGeometry(0.1, 0.3, 8);
+        const headMat = new THREE.MeshBasicMaterial({ color: 0x60a5fa, transparent: true, opacity: 0.6 });
+        const head = new THREE.Mesh(headGeo, headMat);
+        head.rotation.z = -Math.PI / 2;
+        head.position.x = 1.15;
+        this.windArrowGroup.add(head);
+
+        // Wind speed label
+        this.windLabel = this._makeLabel('Wind: 5 m/s', '#60a5fa', 14);
+        this.windLabel.position.set(0, 0.4, 0);
+        this.windLabel.scale.set(1.5, 0.75, 1);
+        this.windArrowGroup.add(this.windLabel);
+
+        // Wind particles (simple dots)
+        this._windParticles = [];
+        for (let i = 0; i < 12; i++) {
+            const dotGeo = new THREE.SphereGeometry(0.02, 4, 4);
+            const dotMat = new THREE.MeshBasicMaterial({ color: 0x93c5fd, transparent: true, opacity: 0.4 });
+            const dot = new THREE.Mesh(dotGeo, dotMat);
+            dot.position.set(Math.random() * 4 - 2, Math.random() * 3, Math.random() * 2 - 1);
+            dot.userData = { startX: dot.position.x };
+            this.windArrowGroup.add(dot);
+            this._windParticles.push(dot);
+        }
+
+        this.windArrowGroup.position.set(8, 5, 0);
+        this.group.add(this.windArrowGroup);
     }
 
     _setupData() {
@@ -815,6 +941,35 @@ export class ProjectileMotion {
         this.data.updateValue('current-x', '—');
         this.data.updateValue('current-y', '—');
         this.data.updateValue('speed', '—');
+
+        // Return camera to default
+        this._returnCameraToDefault();
+    }
+
+    _returnCameraToDefault() {
+        // Animate camera back to default position over ~60 frames
+        const cam = this.scene.camera;
+        const controls = this.scene.controls;
+        const d = this._defaultCamPos;
+        const t = this._defaultCamTarget;
+        let frame = 0;
+        const totalFrames = 60;
+        const startPos = { x: cam.position.x, y: cam.position.y, z: cam.position.z };
+        const startTarget = { x: controls.target.x, y: controls.target.y, z: controls.target.z };
+
+        const step = () => {
+            frame++;
+            const progress = Math.min(frame / totalFrames, 1);
+            const ease = 1 - Math.pow(1 - progress, 3); // easeOutCubic
+            cam.position.x = startPos.x + (d.x - startPos.x) * ease;
+            cam.position.y = startPos.y + (d.y - startPos.y) * ease;
+            cam.position.z = startPos.z + (d.z - startPos.z) * ease;
+            controls.target.x = startTarget.x + (t.x - startTarget.x) * ease;
+            controls.target.y = startTarget.y + (t.y - startTarget.y) * ease;
+            controls.target.z = startTarget.z + (t.z - startTarget.z) * ease;
+            if (frame < totalFrames) requestAnimationFrame(step);
+        };
+        requestAnimationFrame(step);
     }
 
     _clearTrail() {
@@ -855,16 +1010,34 @@ export class ProjectileMotion {
             this.targetGroup.scale.set(scale, 1, scale);
         }
 
+        // Animate wind particles
+        if (this.windEnabled && this._windParticles) {
+            this._windParticles.forEach(dot => {
+                dot.position.x += this.windSpeed * 0.3 * delta;
+                if (dot.position.x > 3) dot.position.x = -3;
+                dot.material.opacity = 0.2 + Math.sin(Date.now() * 0.005 + dot.position.y) * 0.2;
+            });
+        }
+
         if (!this.isFlying) return;
 
-        this.flightTime += delta * 1.2;
+        const timeMultiplier = this.slowMotion ? 0.25 : 1.2;
+        this.flightTime += delta * timeMultiplier;
         const t = this.flightTime;
         const p = this.launchParams;
 
         let vx = p.vx;
         let vy = p.vy - p.gravity * t;
-        const x = p.vx * t;
-        const y = p.vy * t - 0.5 * p.gravity * t * t + 0.36;
+        let x = p.vx * t;
+        let y = p.vy * t - 0.5 * p.gravity * t * t + 0.36;
+
+        // Wind resistance: push projectile horizontally
+        if (this.windEnabled) {
+            const windAccel = this.windSpeed * 0.15;
+            x -= 0.5 * windAccel * t * t;
+            vx -= windAccel * t;
+        }
+
         const speed = Math.sqrt(vx * vx + vy * vy);
 
         // Energy calculations
@@ -933,6 +1106,9 @@ export class ProjectileMotion {
             this.arrowGroup.visible = false;
             this.projectileLight.intensity = 0;
 
+            // Smoothly return camera to default overview
+            this._returnCameraToDefault();
+
             // Impact effects
             this._spawnImpactParticles(x, 0);
             this._playImpactSound();
@@ -967,6 +1143,13 @@ export class ProjectileMotion {
         this.projectile.position.set(x, y, 0);
         this.data.updateValue('current-x', x.toFixed(2), 'm');
         this.data.updateValue('current-y', (y - 0.36).toFixed(2), 'm');
+
+        // Smooth camera tracking — gently follow projectile during flight
+        const cam = this.scene.controls;
+        const targetX = x * 0.3 + this._defaultCamTarget.x * 0.7;
+        const targetY = Math.min(Math.max(y * 0.2 + 1, this._defaultCamTarget.y), 4);
+        cam.target.x += (targetX - cam.target.x) * 0.03;
+        cam.target.y += (targetY - cam.target.y) * 0.03;
 
         // Projectile glow pulse
         this.projectileGlow.material.opacity = 0.1 + speed * 0.003;
@@ -1140,6 +1323,14 @@ export class ProjectileMotion {
         this.scene.removeAnimateCallback(this._animateBound);
         this.scene.removeFromScene(this.group);
         this._clearParticles();
+
+        // Remove drag listeners
+        const canvas = this.scene.canvas;
+        if (this._onPointerDown) canvas.removeEventListener('pointerdown', this._onPointerDown);
+        if (this._onPointerMove) canvas.removeEventListener('pointermove', this._onPointerMove);
+        if (this._onPointerUp) canvas.removeEventListener('pointerup', this._onPointerUp);
+        canvas.classList.remove('dragging', 'hovering-interactive');
+
         this.group.traverse(child => {
             if (child.geometry) child.geometry.dispose();
             if (child.material) {

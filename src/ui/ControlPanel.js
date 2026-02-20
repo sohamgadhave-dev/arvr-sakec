@@ -84,6 +84,86 @@ export class ControlPanel {
         }
     }
 
+    /**
+     * Set toggle switches:
+     * [{ id, label, value, onChange }]
+     */
+    setToggles(configs) {
+        configs.forEach(cfg => {
+            const group = document.createElement('div');
+            group.className = 'toggle-group';
+
+            const label = document.createElement('span');
+            label.className = 'toggle-label';
+            label.textContent = cfg.label;
+
+            const switchEl = document.createElement('label');
+            switchEl.className = 'toggle-switch';
+            const input = document.createElement('input');
+            input.type = 'checkbox';
+            input.id = `toggle-${cfg.id}`;
+            input.checked = !!cfg.value;
+            const slider = document.createElement('span');
+            slider.className = 'toggle-slider';
+            switchEl.appendChild(input);
+            switchEl.appendChild(slider);
+
+            input.addEventListener('change', () => {
+                if (cfg.onChange) cfg.onChange(input.checked);
+            });
+
+            group.appendChild(label);
+            group.appendChild(switchEl);
+            this.controlsContainer.appendChild(group);
+        });
+    }
+
+    /**
+     * Set preset buttons:
+     * label: group title, presets: [{ id, text, value, onClick }]
+     */
+    setPresets(label, presets, groupId) {
+        const group = document.createElement('div');
+        group.className = 'preset-group';
+        if (groupId) group.id = `preset-group-${groupId}`;
+
+        const title = document.createElement('span');
+        title.className = 'preset-label';
+        title.textContent = label;
+        group.appendChild(title);
+
+        const row = document.createElement('div');
+        row.className = 'preset-row';
+
+        presets.forEach((p, idx) => {
+            const btn = document.createElement('button');
+            btn.className = 'preset-btn';
+            btn.id = `preset-${p.id}`;
+            btn.textContent = p.text;
+            if (idx === 0) btn.classList.add('active');
+            btn.addEventListener('click', () => {
+                row.querySelectorAll('.preset-btn').forEach(b => b.classList.remove('active'));
+                btn.classList.add('active');
+                if (p.onClick) p.onClick(p.value);
+            });
+            row.appendChild(btn);
+        });
+
+        group.appendChild(row);
+        this.controlsContainer.appendChild(group);
+    }
+
+    /**
+     * Programmatically update a slider value (syncs UI + internal state)
+     */
+    updateSlider(id, value) {
+        const input = document.getElementById(`slider-${id}`);
+        if (input) {
+            input.value = value;
+            input.dispatchEvent(new Event('input'));
+        }
+    }
+
     clear() {
         this.controlsContainer.innerHTML = '';
         this.actionsContainer.innerHTML = '';

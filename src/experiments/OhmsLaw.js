@@ -9,6 +9,7 @@ export class OhmsLaw {
         this.electrons = [];
         this.sparkParticles = [];
         this.wireGlowMeshes = [];
+        this.circuitOn = true;
 
         // Parameters
         this.voltage = 12;
@@ -18,6 +19,7 @@ export class OhmsLaw {
         this._setupControls();
         this._setupData();
         this._updateCalculations();
+        this._setupInteraction();
 
         this.scene.addToScene(this.group);
         this.scene.setCameraPosition(0, 7, 9);
@@ -38,6 +40,7 @@ export class OhmsLaw {
         this._createVIGraph();
         this._createPowerMeter();
         this._createDangerIndicator();
+        this._createCircuitSwitch();
     }
 
     _createCircuitBoard() {
@@ -705,6 +708,29 @@ export class OhmsLaw {
             this._drawGraph();
         });
 
+        // Resistance presets
+        this.controls.setPresets('⚡ Resistance Presets', [
+            { id: 'r10', text: '10Ω', value: 10, onClick: (v) => { this.controls.updateSlider('resistance', v); } },
+            { id: 'r47', text: '47Ω', value: 47, onClick: (v) => { this.controls.updateSlider('resistance', v); } },
+            { id: 'r100', text: '100Ω', value: 100, onClick: (v) => { this.controls.updateSlider('resistance', v); } },
+            {
+                id: 'r220', text: '220Ω', value: 220, onClick: () => {
+                    // 220 is beyond slider max, clamp to 100
+                    this.controls.updateSlider('resistance', 100);
+                }
+            }
+        ], 'resistance-presets');
+
+        // Circuit power toggle
+        this.controls.setToggles([
+            {
+                id: 'circuit-power', label: '🔌 Circuit Power', value: true, onChange: (on) => {
+                    this.circuitOn = on;
+                    this._toggleCircuit(on);
+                }
+            }
+        ]);
+
         this.controls.setActions([
             {
                 id: 'reset',
@@ -714,11 +740,171 @@ export class OhmsLaw {
                 onClick: () => {
                     this.voltage = 12;
                     this.resistance = 10;
+                    this.controls.updateSlider('voltage', 12);
+                    this.controls.updateSlider('resistance', 10);
                     this._updateCalculations();
                     this._drawGraph();
                 }
             }
         ]);
+    }
+
+    // ─── CIRCUIT SWITCH ─────────────────────────────────
+    _createCircuitSwitch() {
+        this.switchGroup = new THREE.Group();
+
+        // Switch base
+        const baseGeo = new THREE.BoxGeometry(0.6, 0.15, 0.4);
+        const baseMat = new THREE.MeshStandardMaterial({ color: 0x334155, metalness: 0.3, roughness: 0.5 });
+        const base = new THREE.Mesh(baseGeo, baseMat);
+        base.castShadow = true;
+        this.switchGroup.add(base);
+
+        // Switch lever
+        const leverGeo = new THREE.BoxGeometry(0.12, 0.25, 0.12);
+        const leverMat = new THREE.MeshStandardMaterial({
+            color: 0x22c55e,
+            emissive: 0x22c55e,
+            emissiveIntensity: 0.3,
+            metalness: 0.5,
+            roughness: 0.3
+        });
+        this.switchLever = new THREE.Mesh(leverGeo, leverMat);
+        this.switchLever.position.y = 0.18;
+        this.switchGroup.add(this.switchLever);
+        this.switchLeverMat = leverMat;
+
+        // ON/OFF label
+        this.switchLabel = this._createLabel('ON', '#22c55e', 14);
+        this.switchLabel.position.set(0, 0.5, 0);
+        this.switchLabel.scale.set(0.6, 0.3, 1);
+        this.switchGroup.add(this.switchLabel);
+
+        // Light indicator
+        const lightGeo = new THREE.SphereGeometry(0.06, 12, 12);
+        const lightMat = new THREE.MeshBasicMaterial({ color: 0x22c55e });
+        this.switchLight = new THREE.Mesh(lightGeo, lightMat);
+        this.switchLight.position.set(0.35, 0.08, 0);
+        this.switchGroup.add(this.switchLight);
+        this.switchLightMat = lightMat;
+
+        this.switchGroup.position.set(0, 0.58, 1.5);
+        this.group.add(this.switchGroup);
+    }
+
+    _toggleCircuit(on) {
+        if (on) {
+            this.switchLever.position.y = 0.18;
+            this.switchLeverMat.color.setHex(0x22c55e);
+            this.switchLeverMat.emissive.setHex(0x22c55e);
+            this.switchLightMat.color.setHex(0x22c55e);
+            this._updateLabel(this.switchLabel, 'ON');
+            this.switchLabel.userData.color = '#22c55e';
+        } else {
+            this.switchLever.position.y = 0.10;
+            this.switchLeverMat.color.setHex(0xef4444);
+            this.switchLeverMat.emissive.setHex(0xef4444);
+            this.switchLightMat.color.setHex(0x991b1b);
+            this._updateLabel(this.switchLabel, 'OFF');
+            this.switchLabel.userData.color = '#ef4444';
+        }
+        this._updateCalculations();
+    }
+
+    // ─── CLICK TO HIGHLIGHT & INFO ─────────────────────
+    _setupInteraction() {
+        this._raycaster = new THREE.Raycaster();
+        this._mouse = new THREE.Vector2();
+        this._tooltip = null;
+
+        // Component info definitions
+        this._componentInfo = {
+            battery: { name: '🔋 Battery (EMF)', desc: 'Provides electromotive force to drive current through the circuit.', getValue: () => `${this.voltage} V` },
+            resistor: { name: '🔧 Resistor', desc: 'Opposes current flow. Converts electrical energy to heat.', getValue: () => `${this.resistance} Ω` },
+            switch: { name: '🔌 Circuit Switch', desc: 'Click to toggle circuit ON/OFF.', getValue: () => this.circuitOn ? 'ON' : 'OFF' }
+        };
+
+        const canvas = this.scene.canvas;
+
+        this._onClick = (e) => {
+            this._mouse.x = (e.clientX / window.innerWidth) * 2 - 1;
+            this._mouse.y = -(e.clientY / window.innerHeight) * 2 + 1;
+            this._raycaster.setFromCamera(this._mouse, this.scene.camera);
+
+            // Check switch click
+            const switchHits = this._raycaster.intersectObject(this.switchGroup, true);
+            if (switchHits.length > 0) {
+                this.circuitOn = !this.circuitOn;
+                const toggle = document.getElementById('toggle-circuit-power');
+                if (toggle) toggle.checked = this.circuitOn;
+                this._toggleCircuit(this.circuitOn);
+                this._showComponentTooltip(e, this._componentInfo.switch);
+                return;
+            }
+
+            // Check battery click
+            if (this.batteryGroup) {
+                const batteryHits = this._raycaster.intersectObject(this.batteryGroup, true);
+                if (batteryHits.length > 0) {
+                    this._showComponentTooltip(e, this._componentInfo.battery);
+                    return;
+                }
+            }
+
+            // Check resistor click
+            if (this.resistorGroup) {
+                const resistorHits = this._raycaster.intersectObject(this.resistorGroup, true);
+                if (resistorHits.length > 0) {
+                    this._showComponentTooltip(e, this._componentInfo.resistor);
+                    return;
+                }
+            }
+
+            // Click elsewhere: hide tooltip
+            this._hideTooltip();
+        };
+
+        this._onHover = (e) => {
+            this._mouse.x = (e.clientX / window.innerWidth) * 2 - 1;
+            this._mouse.y = -(e.clientY / window.innerHeight) * 2 + 1;
+            this._raycaster.setFromCamera(this._mouse, this.scene.camera);
+
+            const interactables = [this.switchGroup, this.batteryGroup, this.resistorGroup].filter(Boolean);
+            let hit = false;
+            for (const obj of interactables) {
+                if (this._raycaster.intersectObject(obj, true).length > 0) { hit = true; break; }
+            }
+            canvas.classList.toggle('hovering-interactive', hit);
+        };
+
+        canvas.addEventListener('click', this._onClick);
+        canvas.addEventListener('pointermove', this._onHover);
+    }
+
+    _showComponentTooltip(e, info) {
+        this._hideTooltip();
+        const tip = document.createElement('div');
+        tip.className = 'component-tooltip';
+        tip.innerHTML = `
+            <h4>${info.name}</h4>
+            <p>${info.desc}</p>
+            <div class="tooltip-value">${info.getValue()}</div>
+        `;
+        tip.style.left = `${Math.min(e.clientX + 15, window.innerWidth - 280)}px`;
+        tip.style.top = `${Math.min(e.clientY - 10, window.innerHeight - 120)}px`;
+        document.body.appendChild(tip);
+        this._tooltip = tip;
+
+        // Auto-hide after 3s
+        this._tooltipTimer = setTimeout(() => this._hideTooltip(), 3000);
+    }
+
+    _hideTooltip() {
+        if (this._tooltip) {
+            this._tooltip.remove();
+            this._tooltip = null;
+        }
+        if (this._tooltipTimer) clearTimeout(this._tooltipTimer);
     }
 
     _setupData() {
@@ -742,7 +928,8 @@ export class OhmsLaw {
     }
 
     _updateCalculations() {
-        const current = this.voltage / this.resistance;
+        const effectiveCurrent = this.circuitOn ? this.voltage / this.resistance : 0;
+        const current = effectiveCurrent;
         const power = this.voltage * current;
         const conductance = 1 / this.resistance;
 
@@ -814,12 +1001,19 @@ export class OhmsLaw {
     }
 
     _animate(delta) {
-        const current = this.voltage / this.resistance;
-        const power = this.voltage * current;
-        const speed = Math.max(current * 0.08, 0.01);
+        const effectiveCurrent = this.circuitOn ? this.voltage / this.resistance : 0;
+        const current = effectiveCurrent;
+        const power = this.circuitOn ? this.voltage * current : 0;
+        const speed = Math.max(current * 0.08, 0.001);
 
         // Animate electrons
         this.electrons.forEach(e => {
+            if (!this.circuitOn) {
+                // Electrons dim and stop when circuit is off
+                e.userData.coreMat.opacity = 0.15;
+                e.scale.set(0.3, 0.3, 0.3);
+                return;
+            }
             e.userData.progress += speed * delta;
             if (e.userData.progress > 1) e.userData.progress -= 1;
             const pos = this._getPositionOnPath(e.userData.progress);
@@ -869,6 +1063,13 @@ export class OhmsLaw {
         if (this.graphDiv && this.graphDiv.parentElement) {
             this.graphDiv.remove();
         }
+
+        // Remove interaction listeners
+        const canvas = this.scene.canvas;
+        if (this._onClick) canvas.removeEventListener('click', this._onClick);
+        if (this._onHover) canvas.removeEventListener('pointermove', this._onHover);
+        canvas.classList.remove('hovering-interactive');
+        this._hideTooltip();
 
         // Clean up sparks
         this.sparkParticles.forEach(s => {
