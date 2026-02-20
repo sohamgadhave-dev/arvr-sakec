@@ -1,0 +1,147 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>NCTE-Tech Virtual Engineering Lab</title>
+  <meta name="description"
+    content="Interactive WebXR-based virtual engineering lab simulation with projectile motion, Ohm's law, and simple pendulum experiments." />
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link
+    href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=Outfit:wght@400;500;600;700;800&display=swap"
+    rel="stylesheet" />
+  <link rel="stylesheet" href="/src/styles/main.css" />
+</head>
+
+<body>
+  <!-- Hub Screen -->
+  <div id="hub-screen" class="screen active">
+    <header class="hub-header">
+      <div class="logo-section">
+        <div class="logo-icon">🔬</div>
+        <div class="logo-text">
+          <h1>NCTE-Tech Virtual Lab</h1>
+          <p>Interactive Engineering Lab Simulation</p>
+        </div>
+      </div>
+      <div class="header-right">
+        <input type="text" id="student-name-input" class="name-input" placeholder="Enter your name..." />
+        <button class="nav-btn dashboard-btn" id="dashboard-btn" title="Student Dashboard">
+          <span class="btn-icon">📊</span>
+          <span>Dashboard</span>
+        </button>
+        <div class="header-badge">WebXR Powered</div>
+      </div>
+    </header>
+    <main class="hub-main">
+      <div class="hub-intro">
+        <h2>Choose an Experiment</h2>
+        <p>Explore interactive 3D simulations of fundamental engineering concepts</p>
+      </div>
+      <div class="experiment-cards" id="experiment-cards"></div>
+      <div class="hub-actions">
+        <button class="hub-action-btn" id="story-btn">📖 Story Mode</button>
+        <button class="hub-action-btn" id="twin-btn">🌐 Digital Twin</button>
+      </div>
+    </main>
+    <footer class="hub-footer">
+      <p>National Council for Technical Education &bull; Virtual Lab v2.0 &bull; <span class="admin-trigger"
+          title="Ctrl+Shift+A for Admin">Next-Gen Ecosystem</span></p>
+    </footer>
+  </div>
+
+  <!-- Experiment Screen -->
+  <div id="experiment-screen" class="screen">
+    <nav class="experiment-nav" id="experiment-nav">
+      <button class="nav-btn back-btn" id="back-btn">
+        <span class="btn-icon">←</span>
+        <span>Back to Hub</span>
+      </button>
+      <h2 class="experiment-title" id="experiment-title">Experiment</h2>
+      <div class="nav-actions">
+        <button class="nav-btn challenge-btn" id="challenge-btn" title="Challenge Mode">
+          <span class="btn-icon">🎯</span>
+          <span>Challenge</span>
+        </button>
+        <button class="nav-btn report-btn" id="report-btn" title="Generate Lab Report">
+          <span class="btn-icon">📝</span>
+          <span>Report</span>
+        </button>
+        <button class="nav-btn quiz-btn" id="quiz-btn">
+          <span class="btn-icon">📝</span>
+          <span>Take Quiz</span>
+        </button>
+      </div>
+    </nav>
+
+    <canvas id="lab-canvas"></canvas>
+
+    <!-- Control Panel -->
+    <div class="control-panel glass" id="control-panel">
+      <div class="panel-header">
+        <h3>⚙️ Controls</h3>
+        <button class="panel-toggle" id="panel-toggle">▶</button>
+      </div>
+      <div class="panel-body" id="panel-controls"></div>
+      <div class="panel-actions" id="panel-actions"></div>
+    </div>
+
+    <!-- Data Display -->
+    <div class="data-panel glass" id="data-panel">
+      <div class="panel-header">
+        <h3>📊 Results</h3>
+      </div>
+      <div class="data-body" id="data-display"></div>
+    </div>
+
+    <!-- Formula Display -->
+    <div class="formula-panel glass" id="formula-panel">
+      <div class="panel-header">
+        <h3>📐 Formulas</h3>
+      </div>
+      <div class="formula-body" id="formula-display"></div>
+    </div>
+  </div>
+
+  <!-- Quiz Modal -->
+  <div class="quiz-overlay" id="quiz-overlay">
+    <div class="quiz-modal glass" id="quiz-modal">
+      <div class="quiz-header">
+        <h3 id="quiz-title">Knowledge Check</h3>
+        <button class="quiz-close" id="quiz-close">✕</button>
+      </div>
+      <div class="quiz-progress">
+        <div class="progress-bar">
+          <div class="progress-fill" id="quiz-progress-fill"></div>
+        </div>
+        <span class="progress-text" id="quiz-progress-text">1/5</span>
+      </div>
+      <div class="quiz-body" id="quiz-body">
+        <p class="quiz-question" id="quiz-question"></p>
+        <div class="quiz-options" id="quiz-options"></div>
+        <div class="quiz-feedback" id="quiz-feedback"></div>
+      </div>
+      <div class="quiz-footer">
+        <button class="btn btn-primary" id="quiz-next" style="display:none">Next →</button>
+      </div>
+      <!-- Quiz Results -->
+      <div class="quiz-results" id="quiz-results" style="display:none">
+        <div class="results-icon" id="results-icon">🏆</div>
+        <h3 id="results-title">Great Job!</h3>
+        <p class="results-score" id="results-score"></p>
+        <div class="results-grade" id="results-grade"></div>
+        <button class="btn btn-primary" id="quiz-retry">Try Again</button>
+        <button class="btn btn-secondary" id="quiz-done">Done</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Toast Container -->
+  <div class="toast-container" id="toast-container"></div>
+
+  <script type="module" src="/src/main.js"></script>
+</body>
+
+</html>
