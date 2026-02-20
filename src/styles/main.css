@@ -2096,6 +2096,14 @@ input[type="range"]::-moz-range-thumb {
   min-width: 120px;
 }
 
+.cr-submitted {
+  font-size: 0.9rem;
+  font-weight: 600;
+  color: var(--success);
+  margin-top: var(--space-md);
+  margin-bottom: var(--space-sm);
+}
+
 .challenge-result-backdrop {
   position: fixed;
   inset: 0;

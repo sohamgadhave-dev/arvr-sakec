@@ -5,6 +5,7 @@ export class OhmsLaw {
         this.scene = sceneManager;
         this.controls = controlPanel;
         this.data = dataDisplay;
+        this.challengeMode = challengeMode || null;
         this.group = new THREE.Group();
         this.electrons = [];
         this.sparkParticles = [];
@@ -972,6 +973,16 @@ export class OhmsLaw {
         // Spark particles at high power
         if (power > 40 && Math.random() < 0.1) {
             this._spawnSpark();
+        }
+
+        // ── Challenge integration ──
+        if (this.challengeMode && this.challengeMode.isActive()) {
+            const ch = this.challengeMode.currentChallenge;
+            if (ch.type === 'targetValue') {
+                this.challengeMode.checkResult(current, 'targetValue');
+            } else if (ch.type === 'maxValue') {
+                this.challengeMode.checkResult(power, 'maxValue');
+            }
         }
     }
 

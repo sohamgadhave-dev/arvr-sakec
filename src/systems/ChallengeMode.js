@@ -92,7 +92,7 @@ export class ChallengeMode {
             if (diff <= ch.margin) {
                 return this._success(elapsed, 100 - (diff / ch.margin) * 20);
             }
-        } else if (ch.type === 'maxHeight') {
+        } else if (ch.type === 'maxHeight' || ch.type === 'maxValue') {
             if (value <= ch.limit && value > 0) {
                 return this._success(elapsed, 90);
             }
@@ -113,7 +113,8 @@ export class ChallengeMode {
         const speedBonus = Math.max(0, ((timeLimit - timeTaken) / timeLimit) * 30);
         const score = Math.round(accuracy + speedBonus);
 
-        this._lastResult = { challengeId: this.currentChallenge.id, score, time: timeTaken };
+        // Auto-submit: save score immediately
+        this.studentData.saveChallengeScore(this.currentChallenge.id, score);
         this._showResult(true, score, timeTaken);
         return { success: true, score, time: timeTaken };
     }
@@ -146,9 +147,9 @@ export class ChallengeMode {
       ${success ? `
         <div class="cr-score">Score: <strong>${score}</strong>/130</div>
         <div class="cr-time">Time: ${time.toFixed(1)}s</div>
+        <div class="cr-submitted">✅ Score Submitted!</div>
         <div class="cr-buttons">
-          <button class="btn btn-primary cr-submit">✅ Submit Score</button>
-          <button class="btn btn-secondary cr-close">Close</button>
+          <button class="btn btn-primary cr-close">Continue</button>
         </div>
       ` : `
         <div class="cr-reason">${reason}</div>
@@ -169,21 +170,6 @@ export class ChallengeMode {
             }, 300);
             if (this._onComplete) this._onComplete();
         };
-
-        // Submit button — save score then close
-        popup.querySelector('.cr-submit')?.addEventListener('click', () => {
-            if (this._lastResult) {
-                this.studentData.saveChallengeScore(
-                    this._lastResult.challengeId, this._lastResult.score
-                );
-            }
-            // Show submitted confirmation
-            const btn = popup.querySelector('.cr-submit');
-            btn.textContent = '✅ Submitted!';
-            btn.disabled = true;
-            btn.style.opacity = '0.7';
-            setTimeout(closePopup, 800);
-        });
 
         // Retry button — close and restart the same challenge
         popup.querySelector('.cr-retry')?.addEventListener('click', () => {
